@@ -1,0 +1,4 @@
+discord
+requests
+requests-oauthlib
+python-dotenv
