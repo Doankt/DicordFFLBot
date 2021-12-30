@@ -14,6 +14,7 @@ from tabulate import tabulate
 # User imports
 from fflogsoauth import FFLogsOAuth
 from timetools import ms_to_mmssms
+import definitions
 
 # Other imports
 import asyncio
@@ -88,7 +89,7 @@ async def rankings(ctx, log_link):
             tmp_table.append([fight['fightID'], fight['encounter']['name'], ms_to_mmssms(time_dict[fight['fightID']])])
         
         pmt_msg = await ctx.send("`Enter the fight number you want to see rankings for\n"
-            + tabulate(tmp_table, headers=['Fight Number', 'Encounter', 'Time'], tablefmt='github')
+            + tabulate(tmp_table, headers=['Num', 'Fight', 'Time'], tablefmt='github')
             + "`"
         )
 
@@ -126,6 +127,7 @@ async def rankings(ctx, log_link):
             
             player_para = [
                 player['name'],
+                definitions.CLASS_ACRO_MAP[player['class']],
                 player['rank'],
                 player['rankPercent']
             ]
@@ -134,7 +136,7 @@ async def rankings(ctx, log_link):
     await ctx.send(
         "`{encounter_name} - {fight_time}\n{tbl}`\n".format(
             encounter_name = fight['encounter']['name'],
-            tbl = tabulate(tfight, headers=['Name', 'Rank', 'Rank %'], tablefmt='github'),
+            tbl = tabulate(tfight, headers=['Name', 'Role', 'Rank', '%'], tablefmt='github'),
             fight_time = ms_to_mmssms(time_dict[i])
         )
     )
