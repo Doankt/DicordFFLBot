@@ -13,6 +13,7 @@ from tabulate import tabulate
 
 # User imports
 from fflogsoauth import FFLogsOAuth
+import firebasetools
 from timetools import ms_to_mmssms
 import definitions
 
@@ -32,14 +33,11 @@ async def on_ready():
     print('------')
 
 # Rankings Command
-@bot.command(aliases=['r'])
+@bot.command(aliases=['r'], description="Get the rankings of a player")
 async def rankings(ctx, log_link):
     # Parse the log link
     parsed_url = urlparse(log_link)
     parse_path = parsed_url.path.split('/')
-    
-    print(parse_path)
-    print(parse_path[2])
     
     # Assert the first path segment is "reports"
     if parse_path[1] != 'reports':
@@ -67,11 +65,9 @@ async def rankings(ctx, log_link):
 
     res = ff_client.query(q)
 
-    # if 'errors' in res: 
-
-    # Build time dict
+    # Build time dict (id:killtime)
     time_dict = {f['id'] : f['endTime'] - f['startTime'] for f in res['data']['reportData']['report']['fights']}
-    # Build rankings dict
+    # Build rankings dict (id:json)
     rankings_dict = {f['fightID'] : f for f in res['data']['reportData']['report']['rankings']['data']}
 
     # Check < 1 clears
@@ -118,7 +114,6 @@ async def rankings(ctx, log_link):
             await pmt_msg.delete()
         await msg.delete()
     
-    
     # Format and send
     tfight = []
     for role in fight['roles'].values():
@@ -136,9 +131,80 @@ async def rankings(ctx, log_link):
     await ctx.send(
         "`{encounter_name} - {fight_time}\n{tbl}`\n".format(
             encounter_name = fight['encounter']['name'],
-            tbl = tabulate(tfight, headers=['Name', 'Role', 'Rank', '%'], tablefmt='github'),
+            tbl = tabulate(tfight, headers=['Name', 'Job', 'Rank', '%'], tablefmt='github'),
             fight_time = ms_to_mmssms(time_dict[i])
         )
     )
+
+@bot.group(desctiption= "Gets info about yourself", pass_context=True)
+async def me(ctx):
+    if ctx.invoked_subcommand is None:
+        # If no args, get the user's fflogs id
+        fflogs_id = firebasetools.get_fflogs_id(ctx.author.id)
+        if fflogs_id is None:
+            await ctx.send("`You don't have a fflogs id set`")
+            return
+
+        # Do things here
+        q = '''
+        {
+            characterData{
+                character(id: %s){
+                    name,
+                    server{
+                        name,
+                        subregion{
+                            name
+                        }
+                    },
+                    zoneRankings
+                }
+            }
+        }
+        ''' % fflogs_id
+
+        res = ff_client.query(q)
+        character = res['data']['characterData']['character']
+
+        # Build table
+        tbl = []
+        for fight in character['zoneRankings']['rankings']:
+            tbl.append([
+                fight['encounter']['name'],
+                "{0:.1f}".format(fight['rankPercent']) if fight['rankPercent'] is not None else "-",
+                definitions.CLASS_ACRO_MAP[fight['spec']] if fight['spec'] is not None else "-",
+                fight['totalKills'],
+                ms_to_mmssms(fight['fastestKill']) if fight['fastestKill'] != 0 else "-",
+                fight['allStars']['rank'] if fight['allStars'] is not None else "-",
+            ])
+        
+        await ctx.send(
+            "`" +
+            tabulate(tbl, headers=['Encounter', '%', 'Job', 'Kills', 'Fastest Kill', 'Rank'], tablefmt='github')
+            + "`"
+        )
+
+@me.command(invoke_without_command=True, aliases=["set"])
+async def set_user(ctx, fflogs_url):
+    # Parse the log link
+    parsed_url = urlparse(fflogs_url)
+    parse_path = parsed_url.path.split('/')
+    # Assert the first path segment is "character"
+    if parse_path[1] != 'character' or parse_path[2] != 'id':
+        await ctx.send('`Invalid link / Not a character link`')
+        return
+    # Get the last location of the path
+    fflogs_id = parse_path[3]
+    firebasetools.update_user(ctx.author.id, fflogs_id)
+    await ctx.send("`User set to %s`" % fflogs_id)
+
+@me.command(invoke_without_command=True, aliases=["remove"])
+async def remove_user(ctx):
+    ret = firebasetools.remove_user(ctx.author.id)
+    if ret:
+        await ctx.send("`FFLogs ID removed`")
+    else:
+        await ctx.send("`No FFLogs ID to remove`")
+
 
 bot.run(os.environ.get("discord_token"))

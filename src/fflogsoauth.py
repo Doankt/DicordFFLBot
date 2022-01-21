@@ -17,7 +17,6 @@ class FFLogsOAuth:
     # Get OAuth Token / Refresh Token
     def _get_token(self):
         rtime = time.time()
-        print(self.expire, rtime)
         if self.expire < rtime:
             data = {
                 'grant_type': 'client_credentials',
